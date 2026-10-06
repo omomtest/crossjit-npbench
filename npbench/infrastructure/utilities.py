@@ -124,17 +124,28 @@ INSERT INTO lcounts(
 timeit_tmpl = """
 def inner(_it, _timer{init}):
     {setup}
+    
+    # 1. 执行一次预热，确保 JIT 特化已经完成，且指令已进入 L1/L2 缓存
+    # 使用 try-except 保证预热失败不会中断整个测试流程
+    try:
+        {stmt}
+    except:
+        pass 
+        
+    # 2. 计时器开始
     _t0 = _timer()
     for _i in _it:
         {stmt}
     _t1 = _timer()
+    
+    # 3. 计时器结束
     return _t1 - _t0, {output}
 """
-
 
 def benchmark(stmt, setup="pass", out_text="", repeat=1, context={}, output=None, verbose=True):
 
     ldict = {**context}
+    _ = timeit.repeat(stmt, setup=setup, repeat=5, number=1, globals=ldict)
     raw_time_list = timeit.repeat(stmt, setup=setup, repeat=repeat, number=1, globals=ldict)
     raw_time = np.median(raw_time_list)
     ms_time = time_to_ms(raw_time)
